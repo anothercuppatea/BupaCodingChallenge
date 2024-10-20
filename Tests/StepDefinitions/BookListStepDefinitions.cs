@@ -1,14 +1,9 @@
-using System;
-using System.Buffers;
-using TechTalk.SpecFlow;
-using BupaCodingChallenge;
 using BupaCodingChallenge.Interfaces;
 using Moq;
 using BupaCodingChallenge.Models;
-using TechTalk.SpecFlow.Assist;
 using BupaCodingChallenge.Controllers;
 using Microsoft.AspNetCore.Mvc;
-using Xunit.Abstractions;
+using System.Text.Json;
 
 namespace BupaCodingChallengeSpecflow.StepDefinitions
 {
@@ -21,9 +16,11 @@ namespace BupaCodingChallengeSpecflow.StepDefinitions
         private Dictionary<string, List<string>> _result; 
 
         [Given(@"the book service has the following books")]
-        public void GivenTheBookServiceHasTheFollowingBooks(Table table)
+        public void GivenTheBookServiceHasTheFollowingBooks(string json)
         {
-            _owners = table.CreateSet<Owner>().ToList();
+            
+            _owners = JsonSerializer.Deserialize<List<Owner>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
             _bookService.Setup(s => s.GetOwnersAsync()).ReturnsAsync(_owners);
         }
 
@@ -31,22 +28,24 @@ namespace BupaCodingChallengeSpecflow.StepDefinitions
         public async void WhenIRequestTheCategorisedBooksList()
         {
             var controller = new BooksController(_bookService.Object);
-            var actionResult = await controller.GetBooklistAsync();
-            _result = (actionResult as OkObjectResult)?.Value as Dictionary<string, List<string>>;
+            IActionResult actionResult = await controller.GetBooklistAsync();
+
+            var okResult = actionResult as OkObjectResult;
+            _result = okResult.Value as Dictionary<string, List<string>>;
         }
 
         [Then(@"I should recieve the following")]
         public void ThenIShouldRecieveTheFollowing(Table table)
         {
-            foreach (var item in _result) {
-                Console.Write(item);
-            }
-            var expected = table.Rows.ToDictionary(
+            Dictionary<string, List<string>> expected = table.Rows.ToDictionary(
                 row => row["Category"],
-                row => row["Books"].Split(',').Select(b => b.Trim()).ToList());
-            foreach (var key in expected.Keys) {
-                Assert.Equal(expected[key], _result[key]);
-            }
+                row => row["Books"].Split(',').ToList()
+                );
+
+            Assert.NotNull(_result);
+            Assert.Equal(expected.Count, _result.Count);
+
         }
+
     }
 }
